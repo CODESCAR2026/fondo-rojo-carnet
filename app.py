@@ -12,7 +12,18 @@ COLOR_FONDO = (200, 16, 30)  # rojo (R, G, B)
 # Modelo liviano (~4-5 MB) para que funcione bien con poca memoria RAM (plan gratuito de Render).
 # Si en el futuro alojas esto en un servidor con más memoria, puedes cambiar a "u2net_human_seg"
 # (más pesado, pero más preciso recortando personas).
-SESSION = new_session("u2netp")
+#
+# OJO: la sesión se crea de forma DIFERIDA (solo cuando llega la primera foto), no al arrancar.
+# Así el servicio abre el puerto de inmediato al iniciar (Render lo detecta rápido), y el costo
+# de cargar el modelo en memoria se paga solo en la primera petición real, no en el arranque.
+_session = None
+
+
+def get_session():
+    global _session
+    if _session is None:
+        _session = new_session("u2netp")
+    return _session
 
 
 @app.get("/")
@@ -28,7 +39,7 @@ async def remove_bg_red(file: UploadFile = File(...)):
         input_image = Image.open(io.BytesIO(contents)).convert("RGBA")
 
         # 1) Quitar el fondo original (rembg devuelve RGBA con canal alfa = transparencia)
-        sin_fondo = remove(input_image, session=SESSION)
+        sin_fondo = remove(input_image, session=get_session())
 
         # 2) Crear lienzo rojo del mismo tamaño y pegar la persona encima usando el alfa como máscara
         fondo_rojo = Image.new("RGBA", sin_fondo.size, COLOR_FONDO + (255,))
