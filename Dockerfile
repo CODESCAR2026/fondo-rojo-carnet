@@ -10,6 +10,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py .
 
-# Cloud Run inyecta la variable de entorno PORT (por defecto 8080) y espera que el servicio escuche ahí
+# Descargar el modelo de IA (u2netp) DURANTE la compilación, no al arrancar,
+# para que el servicio inicie rápido y no dependa de la red en cada arranque.
+RUN python -c "from rembg import new_session; new_session('u2netp')"
+
+# Render inyecta la variable de entorno PORT y espera que el servicio escuche ahí
 EXPOSE 8080
 CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT:-8080}"]
