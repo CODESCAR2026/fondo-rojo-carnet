@@ -1,0 +1,45 @@
+from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import Response, JSONResponse
+from rembg import remove, new_session
+from PIL import Image
+import io
+
+app = FastAPI()
+
+# Color de fondo para el carnet (rojo sólido). Cambia estos valores si necesitas otro tono.
+COLOR_FONDO = (200, 16, 30)  # rojo (R, G, B)
+
+# Modelo liviano (~4-5 MB) para que funcione bien con poca memoria RAM (plan gratuito de Render).
+# Si en el futuro alojas esto en un servidor con más memoria, puedes cambiar a "u2net_human_seg"
+# (más pesado, pero más preciso recortando personas).
+SESSION = new_session("u2netp")
+
+
+@app.get("/")
+def health():
+    """Endpoint simple para verificar que el servicio está despierto."""
+    return {"status": "ok"}
+
+
+@app.post("/remove-bg-red")
+async def remove_bg_red(file: UploadFile = File(...)):
+    try:
+        contents = await file.read()
+        input_image = Image.open(io.BytesIO(contents)).convert("RGBA")
+
+        # 1) Quitar el fondo original (rembg devuelve RGBA con canal alfa = transparencia)
+        sin_fondo = remove(input_image, session=SESSION)
+
+        # 2) Crear lienzo rojo del mismo tamaño y pegar la persona encima usando el alfa como máscara
+        fondo_rojo = Image.new("RGBA", sin_fondo.size, COLOR_FONDO + (255,))
+        fondo_rojo.paste(sin_fondo, (0, 0), sin_fondo)
+
+        # 3) Convertir a JPEG (sin canal alfa) para que el archivo pese menos
+        final_image = fondo_rojo.convert("RGB")
+        buf = io.BytesIO()
+        final_image.save(buf, format="JPEG", quality=92)
+        buf.seek(0)
+
+        return Response(content=buf.getvalue(), media_type="image/jpeg")
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
