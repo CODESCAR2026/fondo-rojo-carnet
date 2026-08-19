@@ -32,11 +32,26 @@ def health():
     return {"status": "ok"}
 
 
+# Tamaño máximo (en px, del lado más largo) antes de procesar. Fotos de celular
+# pueden pesar varios MB a resolución muy alta, lo que puede agotar los 512 MB
+# de RAM del plan gratuito y hacer que el contenedor se caiga. Para una foto
+# de carnet esta resolución es más que suficiente.
+MAX_DIMENSION = 1200
+
+
 @app.post("/remove-bg-red")
 async def remove_bg_red(file: UploadFile = File(...)):
     try:
         contents = await file.read()
         input_image = Image.open(io.BytesIO(contents)).convert("RGBA")
+
+        # 0) Reducir tamaño si la foto es muy grande (ahorra memoria y tiempo)
+        ancho, alto = input_image.size
+        lado_mayor = max(ancho, alto)
+        if lado_mayor > MAX_DIMENSION:
+            ratio = MAX_DIMENSION / lado_mayor
+            nuevo_tamano = (int(ancho * ratio), int(alto * ratio))
+            input_image = input_image.resize(nuevo_tamano, Image.LANCZOS)
 
         # 1) Quitar el fondo original (rembg devuelve RGBA con canal alfa = transparencia)
         sin_fondo = remove(input_image, session=get_session())
